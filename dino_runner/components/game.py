@@ -1,11 +1,18 @@
 import pygame
+import time
+import pygame.mixer
 
-from dino_runner.utils.constants import BG, ICON, SCREEN_HEIGHT, SCREEN_WIDTH, TITLE, FPS, DEFAULT_TYPE
+
+from dino_runner.utils.constants import PARALLAX, BG, ICON, SCREEN_HEIGHT, SCREEN_WIDTH, TITLE, FPS, DEFAULT_TYPE, MOUNTAINS
 from dino_runner.components.dinosaur import Dinosaur
 from dino_runner.components.obstacles.obstacle_manager import ObstacleManager
 from dino_runner.components.power_ups.power_up_manager import PowerUpManager
 
-FONT_STYLE = "freesansbold.ttf"
+text_delay = 30
+FONT_STYLE = "FixedSys.ttf"
+pygame.mixer.init()
+pygame.mixer.music.load("dino_runner/assets/sea_theme_1.wav")
+
 
 class Game:
     def __init__(self):
@@ -21,6 +28,8 @@ class Game:
         self.y_pos_bg = 380
         self.score = 0
         self.death_count = 0
+        self.x_pos_bg_parallax = 0
+        self.update_time = time.time()
 
         self.player = Dinosaur()
         self.obstacle_manager = ObstacleManager()
@@ -42,6 +51,7 @@ class Game:
         self.power_up_manager.reset_power_ups()
         self.score = 0
         self.game_speed = 20
+        self.velocidade_parallax = 3
         while self.playing:
             self.events()
             self.update()
@@ -56,13 +66,15 @@ class Game:
         user_input = pygame.key.get_pressed()
         self.player.update(user_input)
         self.obstacle_manager.update(self)
-        self.update_score()
+        self.update_score(self)
         self.power_up_manager.update(self)
 
-    def update_score(self):
+    def update_score(self, game):
         self.score += 1
         if self.score % 100 == 0:
             self.game_speed += 5
+        if game.player.has_power_up and game.player.type == "boost":
+            self.score += 20
 
     def draw(self):
         self.clock.tick(FPS)
@@ -77,6 +89,14 @@ class Game:
         pygame.display.flip()
 
     def draw_background(self):
+        parallax_width = PARALLAX.get_width()
+        self.screen.blit(PARALLAX, (self.x_pos_bg_parallax, 0))
+        self.screen.blit(PARALLAX, (self.x_pos_bg_parallax + parallax_width, 0))
+        self.x_pos_bg_parallax -= self.velocidade_parallax
+        if self.x_pos_bg_parallax <= -parallax_width:
+            self.x_pos_bg_parallax = 0
+        self.screen.blit(PARALLAX, (self.x_pos_bg_parallax + parallax_width, 0))
+
         image_width = BG.get_width()
         self.screen.blit(BG, (self.x_pos_bg, self.y_pos_bg))
         self.screen.blit(BG, (image_width + self.x_pos_bg, self.y_pos_bg))
@@ -99,7 +119,7 @@ class Game:
         if self.player.has_power_up:
             time_to_show = round((self.player.power_up_time - pygame.time.get_ticks()) / 1000, 2)
             if time_to_show >= 0:
-                self.render_text(f"{self.player.type.capitalize()} enabled for {time_to_show} seconds", 18, (0, 0 ,0), 500, 50)
+                self.render_text(f"{self.player.type.capitalize()} enabled for {time_to_show} seconds", 22, (155, 0 ,0), 500, 50)
             else:
                 self.player.has_power_up = False
                 self.player.type = DEFAULT_TYPE
@@ -113,19 +133,35 @@ class Game:
                 self.run()
 
     def show_menu(self):
-        self.screen.fill((255, 255, 255))
+        self.screen.blit(MOUNTAINS, (0, 0))
         half_screen_height = SCREEN_HEIGHT // 2
-        half_screen_width = SCREEN_WIDTH // 2 
+        half_screen_width = SCREEN_WIDTH // 2
+
+        frame_count = self.frame_count if hasattr(self, 'frame_count') else 0
+        show_text = frame_count < text_delay
+
+        if not pygame.mixer.music.get_busy():
+            pygame.mixer.music.play(-1)
 
         if self.death_count == 0:
-            self.screen.blit(ICON, (half_screen_width -40, half_screen_height -140))
-            self.render_text("Press any key to start", 22, (0, 0, 0), half_screen_width, half_screen_height +20)
+            self.screen.blit(ICON, (half_screen_width - 40, half_screen_height - 45))
+
+            if show_text:
+                self.render_text("Press any key to start", 30, (0, 80, 97), half_screen_width, half_screen_height + 20)
         else:
-            self.screen.blit(ICON, (half_screen_width -40, half_screen_height -140))
-            self.render_text("Press any key to restart", 22, (0, 0, 0), half_screen_width, half_screen_height +20)
-            self.render_text(f"Score: {self.score}", 22, (0,0,0), half_screen_width, half_screen_height +60)
-            self.render_text(f"Death count: {self.death_count}", 22, (0, 0, 0), half_screen_width, half_screen_height +95)
+            self.screen.blit(ICON, (half_screen_width - 40, half_screen_height - 45))
+
+            if show_text:
+                self.render_text("Press any key to restart", 30, (0, 80, 97), half_screen_width, half_screen_height + 20)
+                self.render_text(f"Score: {self.score}", 22, (0, 233, 0), half_screen_width, half_screen_height + 60)
+                self.render_text(f"Death count: {self.death_count}", 22, (255, 0, 0), half_screen_width, half_screen_height + 95)
+                
+        frame_count += 1
+        if frame_count >= 2 * text_delay:
+            frame_count = 0
+
+        self.frame_count = frame_count
+
 
         pygame.display.update()
-
         self.handle_events_on_menu()
